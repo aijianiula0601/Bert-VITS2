@@ -39,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument("--whisper_size", default="medium")
     parser.add_argument("--data_dir", default="", help="目录下面保存子目录，每个子目录为一个speaker名字，speaker目录下面是改speaker的所有音频。")
     parser.add_argument("--config_file", default="./configs/config.json")
+    parser.add_argument("--save_meta_file", default="")
     args = parser.parse_args()
     if args.languages == "CJE":
         lang2token = {
@@ -67,32 +68,38 @@ if __name__ == "__main__":
         hps = json.load(f)
     target_sr = hps['data']['sampling_rate']
     processed_files = 0
-    for speaker in speaker_names:
-        for i, wavfile in enumerate(list(os.walk(parent_dir + speaker))[0][2]):
-            # try to load file as audio
-            if wavfile.startswith("processed_"):
-                continue
-            try:
-                wav, sr = torchaudio.load(parent_dir + speaker + "/" + wavfile, frame_offset=0, num_frames=-1,
-                                          normalize=True,
-                                          channels_first=True)
-                wav = wav.mean(dim=0).unsqueeze(0)
-                if sr != target_sr:
-                    wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=target_sr)(wav)
-                if wav.shape[1] / sr > 20:
-                    print(f"{wavfile} too long, ignoring\n")
-                save_path = parent_dir + speaker + "/" + f"processed_{i}.wav"
-                torchaudio.save(save_path, wav, target_sr, channels_first=True)
-                # transcribe text
-                lang, text = transcribe_one(save_path)
-                if lang not in list(lang2token.keys()):
-                    print(f"{lang} not supported, ignoring\n")
-                    continue
-                    # text = "ZH|" + text + "\n"
-                text = lang2token[lang] + text + "\n"
-                speaker_annos.append(save_path + "|" + speaker + "|" + text)
 
-                processed_files += 1
-                print(f"Processed: {processed_files}/{total_files}")
-            except:
-                continue
+    with open(args.save_meta_file, 'w', buffering=1) as fw:
+
+        for speaker in speaker_names:
+            for i, wavfile in enumerate(list(os.walk(parent_dir + speaker))[0][2]):
+                # try to load file as audio
+                if wavfile.startswith("processed_"):
+                    continue
+                try:
+                    wav, sr = torchaudio.load(parent_dir + speaker + "/" + wavfile, frame_offset=0, num_frames=-1,
+                                              normalize=True,
+                                              channels_first=True)
+                    wav = wav.mean(dim=0).unsqueeze(0)
+                    if sr != target_sr:
+                        wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=target_sr)(wav)
+                    if wav.shape[1] / sr > 20:
+                        print(f"{wavfile} too long, ignoring\n")
+                    save_path = parent_dir + speaker + "/" + f"processed_{i}.wav"
+                    torchaudio.save(save_path, wav, target_sr, channels_first=True)
+                    # transcribe text
+                    lang, text = transcribe_one(save_path)
+                    if lang not in list(lang2token.keys()):
+                        print(f"{lang} not supported, ignoring\n")
+                        continue
+                        # text = "ZH|" + text + "\n"
+                    text = lang2token[lang] + text + "\n"
+                    w_line = save_path + "|" + speaker + "|" + text
+                    speaker_annos.append(w_line)
+
+                    fw.write(w_line)
+
+                    processed_files += 1
+                    print(f"Processed: {processed_files}/{total_files}")
+                except:
+                    continue
