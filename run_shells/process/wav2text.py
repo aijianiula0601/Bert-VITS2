@@ -75,38 +75,43 @@ if __name__ == "__main__":
     phone_list = []
     processed_line_list = []
 
-    for speaker in speaker_names:
-        for i, wavfile in enumerate(list(os.walk(parent_dir + speaker))[0][2]):
-            # try to load file as audio
-            if wavfile.startswith("processed_"):
-                continue
-            try:
-                wav, sr = torchaudio.load(parent_dir + speaker + "/" + wavfile, frame_offset=0, num_frames=-1,
-                                          normalize=True,
-                                          channels_first=True)
-                wav = wav.mean(dim=0).unsqueeze(0)
-                if sr != target_sr:
-                    wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=target_sr)(wav)
-                if wav.shape[1] / sr > 20:
-                    print(f"{wavfile} too long, ignoring\n")
-                save_path = parent_dir + speaker + "/" + f"processed_{i}.wav"
-                torchaudio.save(save_path, wav, target_sr, channels_first=True)
-                # transcribe text
-                lang, text = transcribe_one(save_path)
-                if lang not in list(lang2token.keys()):
-                    print(f"{lang} not supported, ignoring\n")
+    with open(args.save_meta_file + "_temp", 'w', buffering=1) as fw:
+        for speaker in speaker_names:
+            for i, wavfile in enumerate(list(os.walk(parent_dir + speaker))[0][2]):
+                try:
+                    save_path = parent_dir + speaker + "/" + f"processed_{i}.wav"
+
+                    if wavfile.startswith("processed_"):
+                        wav, sr = torchaudio.load(parent_dir + speaker + "/" + wavfile, frame_offset=0, num_frames=-1,
+                                                  normalize=True,
+                                                  channels_first=True)
+                        wav = wav.mean(dim=0).unsqueeze(0)
+                        if sr != target_sr:
+                            wav = torchaudio.transforms.Resample(orig_freq=sr, new_freq=target_sr)(wav)
+                        if wav.shape[1] / sr > 20:
+                            print(f"{wavfile} too long, ignoring\n")
+                        torchaudio.save(save_path, wav, target_sr, channels_first=True)
+
+                    else:
+                        # transcribe text
+                        lang, text = transcribe_one(save_path)
+                        if lang not in list(lang2token.keys()):
+                            print(f"{lang} not supported, ignoring\n")
+                            continue
+                            # text = "ZH|" + text + "\n"
+
+                        phone = text2phone(text, language=args.languages.lower())
+                        phone_list.append(phone)
+                        w_line = f"{save_path}|{speaker}|{lang2token[lang]}{text}|{phone}\n"
+                        processed_line_list.append(w_line)
+
+                        fw.write(w_line)
+
+                        processed_files += 1
+                        print(f"Processed: {processed_files}/{total_files}")
+                except Exception as e:
+                    print(f"--error:{e}")
                     continue
-                    # text = "ZH|" + text + "\n"
-
-                phone = text2phone(text, language=args.languages.lower())
-                phone_list.append(phone)
-                w_line = f"{save_path}|{speaker}|{lang2token[lang]}{text}|{phone}\n"
-                processed_line_list.append(w_line)
-
-                processed_files += 1
-                print(f"Processed: {processed_files}/{total_files}")
-            except Exception as e:
-                traceback.print_exception(e)
 
     # -----------------------
     # save vocab
@@ -119,7 +124,6 @@ if __name__ == "__main__":
     vocab = load_vocab(args.save_vocab_file)
 
     with open(args.save_meta_file, 'w', buffering=1) as fw:
-
         for line in processed_line_list:
             phone = line.split("|")[-1]
             indices = vocab.lookup_indices(phone.split())
