@@ -81,7 +81,7 @@ if __name__ == "__main__":
                 try:
                     save_path = parent_dir + speaker + "/" + f"processed_{i}.wav"
 
-                    if wavfile.startswith("processed_"):
+                    if not os.path.exists(save_path):
                         wav, sr = torchaudio.load(parent_dir + speaker + "/" + wavfile, frame_offset=0, num_frames=-1,
                                                   normalize=True,
                                                   channels_first=True)
@@ -92,23 +92,26 @@ if __name__ == "__main__":
                             print(f"{wavfile} too long, ignoring\n")
                         torchaudio.save(save_path, wav, target_sr, channels_first=True)
 
-                    else:
-                        # transcribe text
-                        lang, text = transcribe_one(save_path)
-                        if lang not in list(lang2token.keys()):
-                            print(f"{lang} not supported, ignoring\n")
-                            continue
-                            # text = "ZH|" + text + "\n"
+                    # ----------------------
+                    # transcribe text
+                    # ----------------------
+                    lang, text = transcribe_one(save_path)
+                    if lang not in list(lang2token.keys()):
+                        print(f"{lang} not supported, ignoring\n")
+                        continue
 
-                        phone = text2phone(text, language=args.languages.lower())
-                        phone_list.append(phone)
-                        w_line = f"{save_path}|{speaker}|{lang2token[lang]}{text}|{phone}\n"
-                        processed_line_list.append(w_line)
+                    # ----------------------
+                    # 转换为phone
+                    # ----------------------
+                    phone = text2phone(text, language=args.languages.lower())
+                    phone_list.append(phone)
+                    w_line = f"{save_path}|{speaker}|{lang2token[lang]}{text}|{phone}\n"
+                    processed_line_list.append(w_line)
 
-                        fw.write(w_line)
+                    fw.write(w_line)
 
-                        processed_files += 1
-                        print(f"Processed: {processed_files}/{total_files}")
+                    processed_files += 1
+                    print(f"Processed: {processed_files}/{total_files}")
                 except Exception as e:
                     print(f"--error:{e}")
                     continue
